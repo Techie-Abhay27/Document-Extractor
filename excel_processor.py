@@ -11,8 +11,16 @@ def extract_excel_data(file_path):
         print("Excel Data:")
         print(df)
 
-        # Convert data into text
-        extracted_text = df.to_string(index=False)
+        # Convert each row into labelled text
+        extracted_text = ""
+
+        for index, row in df.iterrows():
+
+            for column in df.columns:
+                column_name = str(column).strip()
+                extracted_text += f"{column_name}: {row[column]}\n"
+
+            extracted_text += "\n"
 
         return extracted_text
 

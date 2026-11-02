@@ -1,71 +1,156 @@
+import os
+
 from database import get_database_schema
 from file_handler import identify_file
-import os
-from image_processor import extract_image_text
-from pdf_processor import extract_pdf_text
-from docx_processor import extract_docx_text
-from excel_processor import extract_excel_data
 
-schema = get_database_schema()
+from text_extractor import extract_text
 
-if schema:
+from attribute_extractor import (
+    extract_attributes,
+    identify_document_type,
+    extract_multiple_attributes
+)
 
-    print("\nDATABASE SCHEMA")
+from data_validator import validate_attributes
+from database_operations import insert_record
 
-    for table, columns in schema.items():
 
-        print(f"\nTable: {table}")
+# Required fields for each document category
+required_fields_map = {
+    "employee": ["name", "email", "phone", "department"],
+    "customer": ["customer_name", "email", "address"],
+    "supplier": ["supplier_name", "contact", "company"]
+}
 
-        for column in columns:
 
-            print(f"  - {column}")
-            
-folder = "uploads"
+def display_database_schema():
 
-for file in os.listdir(folder):
+    schema = get_database_schema()
 
-    file_path = os.path.join(folder, file)
+    if schema:
 
+        print("\nDATABASE SCHEMA")
+        print("----------------------")
+
+        for table, columns in schema.items():
+
+            print(f"\nTable: {table}")
+
+            for column in columns:
+                print(f"  - {column}")
+
+
+def process_document(file_path):
+
+    if not os.path.isfile(file_path):
+        print("File not found!")
+        return
+
+    # Identify file format
     file_type = identify_file(file_path)
 
-    print(file, "---->", file_type)
+    format_names = {
+        "image": "Image",
+        "pdf": "PDF",
+        "docx": "Word",
+        "excel": "Excel",
+        "text": "Text"
+    }
 
-#image processing
-image_path = "uploads/employee.png"
+    print("\nFile Format:", format_names.get(file_type, "Unknown"))
 
-text = extract_image_text(image_path)
+    if file_type not in format_names:
+        print("Unsupported file format!")
+        return
 
-print("\nExtracted Text:")
-print("----------------------")
+    # Extract text
+    extracted_text = extract_text(file_path)
 
-print(text)
+    if not extracted_text or not extracted_text.strip():
+        print("No text extracted from document!")
+        return
 
-#Pdf processing
-pdf_path = "uploads/customer.pdf"
+    # Identify document category
+    document_type = identify_document_type(extracted_text)
 
-text = extract_pdf_text(pdf_path)
+    print("Document Category:", document_type.capitalize())
 
-print("\nExtracted PDF Text:")
-print("----------------------")
+    if document_type not in required_fields_map:
+        print("Unknown document category!")
+        return
 
-print(text)
+    required_fields = required_fields_map[document_type]
 
-#word file processing
-docx_path = "uploads/supplier.docx"
+    # Process multiple Excel records
+    if file_type == "excel" and document_type == "supplier":
 
-text = extract_docx_text(docx_path)
+        records = extract_multiple_attributes(extracted_text)
 
-print("\nExtracted DOCX Text:")
-print("----------------------")
+        if not records:
+            print("No supplier records found!")
+            return
 
-print(text)
+        print("\nExtracted Supplier Records:")
+        print("------------------------------")
 
-#Excel file processing
-excel_path = "uploads/data.xlsx"
+        for index, attributes in enumerate(records, start=1):
 
-text = extract_excel_data(excel_path)
+            print(f"\nSupplier Record {index}:")
 
-print("\nExtracted Excel Text:")
-print("----------------------")
+            for key, value in attributes.items():
+                print(f"{key}: {value}")
 
-print(text)
+            # Validate record
+            is_valid = validate_attributes(
+                attributes,
+                required_fields
+            )
+
+            if is_valid:
+
+                print("Validation: PASSED")
+
+                insert_record("supplier", attributes)
+
+            else:
+                print("Validation: FAILED")
+
+    # Process single document
+    else:
+
+        attributes = extract_attributes(extracted_text)
+
+        print("\nExtracted Attributes:")
+        print("------------------------------")
+
+        for key, value in attributes.items():
+            print(f"{key}: {value}")
+
+        # Validate attributes
+        is_valid = validate_attributes(
+            attributes,
+            required_fields
+        )
+
+        if is_valid:
+
+            print("\nData Validation: PASSED")
+
+            insert_record(document_type, attributes)
+
+        else:
+            print("\nData Validation: FAILED")
+
+
+# Main application
+if __name__ == "__main__":
+
+    print("================================")
+    print("       DOCUMENT EXTRACTOR")
+    print("================================")
+
+    display_database_schema()
+
+    file_path = input("\nEnter document path: ").strip()
+
+    process_document(file_path)
